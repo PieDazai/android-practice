@@ -17,7 +17,6 @@ fun ColorPickerScreen(
 
     Column(modifier = Modifier.padding(16.dp)) {
 
-        // Цветной блок
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -27,12 +26,10 @@ fun ColorPickerScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // HEX
         Text(text = uiState.hexCode)
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // RED
         Text("Red: ${uiState.red}")
         Slider(
             value = uiState.red.toFloat(),
@@ -40,7 +37,6 @@ fun ColorPickerScreen(
             valueRange = 0f..255f
         )
 
-        // GREEN
         Text("Green: ${uiState.green}")
         Slider(
             value = uiState.green.toFloat(),
@@ -48,7 +44,6 @@ fun ColorPickerScreen(
             valueRange = 0f..255f
         )
 
-        // BLUE
         Text("Blue: ${uiState.blue}")
         Slider(
             value = uiState.blue.toFloat(),
