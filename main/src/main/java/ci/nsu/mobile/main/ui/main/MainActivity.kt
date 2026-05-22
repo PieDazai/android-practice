@@ -23,12 +23,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ci.nsu.mobile.main.data.AuthRepository
+import ci.nsu.mobile.main.data.TokenManager
+import ci.nsu.mobile.main.deposit.BottomScreen
+import ci.nsu.mobile.main.deposit.DepositViewModel
+import ci.nsu.mobile.main.deposit.ServiceLocator
 
 class MainActivity : ComponentActivity() {
 
@@ -45,9 +50,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavigation(
-                        authRepository = authRepository
-                    )
+                    AppNavigation()
                 }
             }
         }
@@ -55,33 +58,55 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AppNavigation(authRepository: AuthRepository) {
-    var currentScreen by remember { mutableStateOf<Screen>(Screen.Login) }
+fun AppNavigation() {
+
+    val context = LocalContext.current
+
+    // Service Locator создаётся ОДИН раз
+    val serviceLocator = remember {
+        ServiceLocator(context)
+    }
+
+    var currentScreen by remember {
+        mutableStateOf<Screen>(Screen.Login)
+    }
 
     var restartKey by remember { mutableStateOf(0) }
 
     val loginViewModel: LoginViewModel = viewModel(
         key = "login_$restartKey"
     ) {
-        LoginViewModel(authRepository)
+        LoginViewModel(serviceLocator.authRepository)
     }
 
-    val registerViewModel: RegisterViewModel = viewModel {
-        RegisterViewModel(authRepository)
+    val registerViewModel: RegisterViewModel = viewModel(
+        key = "register_$restartKey"
+    ) {
+        RegisterViewModel(serviceLocator.authRepository)
     }
 
     val usersViewModel: UsersViewModel = viewModel(
         key = "users_$restartKey"
     ) {
-        UsersViewModel(authRepository)
+        UsersViewModel(serviceLocator.authRepository)
+    }
+
+    val depositViewModel: DepositViewModel = viewModel(
+        key = "deposit_$restartKey"
+    ) {
+        DepositViewModel(
+            serviceLocator.depositRepository,
+            serviceLocator.tokenManager
+        )
     }
 
     when (currentScreen) {
+
         Screen.Login -> {
             LoginScreen(
                 viewModel = loginViewModel,
                 onLoginSuccess = {
-                    currentScreen = Screen.Users
+                    currentScreen = Screen.Main
                 },
                 onNavigateToRegister = {
                     currentScreen = Screen.Register
@@ -101,14 +126,21 @@ fun AppNavigation(authRepository: AuthRepository) {
             )
         }
 
-        Screen.Users -> {
-            UsersScreen(
-                viewModel = usersViewModel,
+        Screen.Main -> {
+            MainScreen(
+                usersViewModel = usersViewModel,
+                depositViewModel = depositViewModel,
                 onLogout = {
-                    authRepository.logout()
+                    serviceLocator.tokenManager.clearToken()
                     restartKey++
                     currentScreen = Screen.Login
                 }
+            )
+        }
+
+        Screen.Users -> {
+            UsersScreen(
+                viewModel = usersViewModel
             )
         }
     }
@@ -118,6 +150,7 @@ sealed class Screen {
     object Login : Screen()
     object Register : Screen()
     object Users : Screen()
+    object Main : Screen()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -461,8 +494,7 @@ fun RegisterScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UsersScreen(
-    viewModel: UsersViewModel,
-    onLogout: () -> Unit
+    viewModel: UsersViewModel
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -470,22 +502,7 @@ fun UsersScreen(
         viewModel.loadUsers()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Пользователи") },
-                actions = {
-                    TextButton(
-                        onClick = {
-                            onLogout()
-                        }
-                    ) {
-                        Text("Выйти")
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
+    Scaffold { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -594,3 +611,248 @@ fun UserCard(user: UserDto) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainScreen(
+    usersViewModel: UsersViewModel,
+    depositViewModel: DepositViewModel,
+    onLogout: () -> Unit
+) {
+
+    var currentTab by remember {
+        mutableStateOf<BottomScreen>(
+            BottomScreen.Users
+        )
+    }
+
+    Scaffold(
+
+        topBar = {
+
+            TopAppBar(
+
+                title = {
+                    Text("Расчёт вкладов")
+                },
+
+                actions = {
+
+                    TextButton(
+                        onClick = {
+                            onLogout()
+                        }
+                    ) {
+
+                        Text("Выйти")
+                    }
+                }
+            )
+        },
+
+        bottomBar = {
+
+            NavigationBar {
+
+                NavigationBarItem(
+                    selected = currentTab is BottomScreen.Users,
+                    onClick = {
+                        currentTab = BottomScreen.Users
+                    },
+                    icon = {},
+                    label = {
+                        Text("Пользователи")
+                    }
+                )
+
+                NavigationBarItem(
+                    selected = currentTab is BottomScreen.Deposits,
+                    onClick = {
+                        currentTab = BottomScreen.Deposits
+                    },
+                    icon = {},
+                    label = {
+                        Text("Мои расчёты")
+                    }
+                )
+
+                NavigationBarItem(
+                    selected = currentTab is BottomScreen.NewDeposit,
+                    onClick = {
+                        currentTab = BottomScreen.NewDeposit
+                    },
+                    icon = {},
+                    label = {
+                        Text("Новый расчёт")
+                    }
+                )
+            }
+        }
+
+    ) { paddingValues ->
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+
+            when (currentTab) {
+
+                BottomScreen.Users -> {
+
+                    UsersScreen(
+                        viewModel = usersViewModel
+                    )
+                }
+
+                BottomScreen.Deposits -> {
+
+                    DepositHistoryScreen(
+                        viewModel = depositViewModel
+                    )
+                }
+
+                BottomScreen.NewDeposit -> {
+
+                    NewDepositScreen(
+                        viewModel = depositViewModel
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DepositHistoryScreen(
+    viewModel: DepositViewModel
+) {
+
+    val list by viewModel.history.collectAsState()
+
+    if (list.isEmpty()) {
+
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+
+            Text("История расчётов пуста")
+        }
+
+    } else {
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+
+            items(list) { deposit ->
+
+                Card(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+
+                        Text("Сумма: ${deposit.finalAmount}")
+
+                        Text("Проценты: ${deposit.interestEarned}")
+
+                        Text("Срок: ${deposit.periodMonths}")
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
+                            onClick = {
+                                viewModel.delete(deposit)
+                            }
+                        ) {
+
+                            Text("Удалить")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun NewDepositScreen(
+    viewModel: DepositViewModel
+) {
+
+    val state by viewModel.state.collectAsState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+
+        TextField(
+            value = state.initialAmount,
+            onValueChange = viewModel::updateInitial,
+            label = {
+                Text("Начальная сумма")
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        TextField(
+            value = state.period,
+            onValueChange = viewModel::updatePeriod,
+            label = {
+                Text("Срок")
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        TextField(
+            value = state.monthly,
+            onValueChange = viewModel::updateMonthly,
+            label = {
+                Text("Пополнение")
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = {
+                viewModel.calculate()
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+
+            Text("Рассчитать")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text("Итоговая сумма: ${state.finalAmount}")
+
+        Text("Проценты: ${state.interest}")
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = {
+                viewModel.save()
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+
+            Text("Сохранить")
+        }
+    }
+}

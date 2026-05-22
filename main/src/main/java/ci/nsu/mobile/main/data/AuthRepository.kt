@@ -23,8 +23,11 @@ class AuthRepository(private val context: Context) {
                     tokenManager.token = authResponse.token
                     val usersResponse = apiService.getUsers()
                     if (usersResponse.isSuccessful && usersResponse.body() != null) {
-                        // Возвращаем первого пользователя как текущего
                         val currentUser = usersResponse.body()?.find { it.login == login }
+                        if (currentUser != null) {
+                            tokenManager.userId = currentUser.id.toLong()
+                        }
+
                         Result.success(currentUser ?: UserDto(0, login, "", "", null))
                     } else {
                         Result.success(UserDto(0, login, "", "", null))
